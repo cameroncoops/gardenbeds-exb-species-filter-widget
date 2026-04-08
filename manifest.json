@@ -1,0 +1,22 @@
+{
+  "name": "gardenbeds-speciesfilter",
+  "label": "Garden Beds - Species Filter",
+  "type": "widget",
+  "version": "1.14.0",
+  "exbVersion": "1.14.0",
+  "author": "Cam Cooper",
+  "description": "Filter garden beds based on a selected Species",
+  "copyright": "",
+  "license": "http://www.apache.org/licenses/LICENSE-2.0",
+  "properties": {},
+  "dependency": [
+    "jimu-arcgis"
+  ],
+  "translatedLocales": [
+    "en"
+  ],
+  "defaultSize": {
+    "width": 420,
+    "height": 500
+  }
+}
