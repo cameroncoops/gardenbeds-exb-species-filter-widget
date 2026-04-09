@@ -17,15 +17,41 @@ const escapeSqlValue = (value: string) =>
   return value.replace(/'/g, "''")
 }
 
+const SELECTED_SPECIES_UID_KEY = 'gardenbeds:selectedSpeciesUid'
+
 const Widget = (props: AllWidgetProps<any>) =>
 {
-  const [selectedSpeciesUid, setSelectedSpeciesUid] = React.useState('')
+  const [selectedSpeciesUid, setSelectedSpeciesUidState] = React.useState('')
   const [speciesOptions, setSpeciesOptions] = React.useState<SpeciesOption[]>([])
   const [matchingGardenUids, setMatchingGardenUids] = React.useState<string[]>([])
   const [matchingMasterCount, setMatchingMasterCount] = React.useState<number | null>(null)
   const [matchingStockCount, setMatchingStockCount] = React.useState<number | null>(null)
   const [matchingMasterGardenUids, setMatchingMasterGardenUids] = React.useState<string[]>([])
   const [statusMessage, setStatusMessage] = React.useState('Loading species...')
+
+  // Wrapper for setSelectedSpeciesUid that also updates sessionStorage
+  const setSelectedSpeciesUid = (speciesUid: string) =>
+  {
+    setSelectedSpeciesUidState(speciesUid)
+    if (speciesUid)
+    {
+      sessionStorage.setItem(SELECTED_SPECIES_UID_KEY, speciesUid)
+    }
+    else
+    {
+      sessionStorage.removeItem(SELECTED_SPECIES_UID_KEY)
+    }
+  }
+
+  // Initialize selectedSpeciesUid from sessionStorage on mount
+  React.useEffect(() =>
+  {
+    const savedSpeciesUid = sessionStorage.getItem(SELECTED_SPECIES_UID_KEY) || ''
+    if (savedSpeciesUid)
+    {
+      setSelectedSpeciesUidState(savedSpeciesUid)
+    }
+  }, [])
 
   React.useEffect(() =>
   {
