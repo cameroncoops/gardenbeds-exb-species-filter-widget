@@ -11,7 +11,7 @@ import {
 } from './lib/plant-queries'
 import type { SpeciesOption } from './lib/plant-types'
 
-const WIDGET_VERSION = '1.14.2'
+const WIDGET_VERSION = '1.14.3'
 const SHOW_DEBUG = false
 
 const Widget = (props: AllWidgetProps<any>) =>
@@ -164,6 +164,9 @@ const Widget = (props: AllWidgetProps<any>) =>
 
   return (
     <div className="widget-template-map-aware p-3 bg-white" data-widget-version={WIDGET_VERSION}>
+      <div className="mb-2" style={{ fontSize: '0.85rem', color: '#666', textAlign: 'right' }}>
+        v{WIDGET_VERSION}
+      </div>
       
       <div className="mb-3">
         <label htmlFor="species-select"><strong>Species</strong></label>

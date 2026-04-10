@@ -8,7 +8,6 @@ import type { SpeciesOption } from './plant-types'
 export const buildSpeciesQuery = (): Query =>
 {
   return new Query({
-    where: '1=1',
     outFields: ['species_uid', 'species_name'],
     returnGeometry: false
   })
