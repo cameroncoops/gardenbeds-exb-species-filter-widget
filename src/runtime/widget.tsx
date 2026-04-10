@@ -1,23 +1,18 @@
 import { React, type AllWidgetProps, DataSourceManager, type FeatureLayerDataSource } from 'jimu-core'
-import Query from 'esri/rest/support/Query'
 import { executeQueryJSON } from 'esri/rest/query'
+import { SPECIES_TABLE_URL, PLANTS_IN_BED_URL } from './lib/service-urls'
+import { getSelectedSpeciesUid, setSelectedSpeciesUid as persistSelectedSpeciesUid } from './lib/session-keys'
+import {
+  buildSpeciesQuery,
+  buildPlantsInBedQuery,
+  buildGardenUidWhereClause,
+  parseSpeciesOptions,
+  parseGardenUids
+} from './lib/plant-queries'
+import type { SpeciesOption } from './lib/plant-types'
 
-const SPECIES_TABLE_URL = 'https://arcgis.curtin.edu.au/arcgis/rest/services/Parks_Gardens/PropGIS_SDE_GardenBedsTEST_Plant_Species_/MapServer/0'
-const PLANTS_IN_BED_URL = 'https://arcgis.curtin.edu.au/arcgis/rest/services/Parks_Gardens/PropGIS_SDE_GardenBedsTEST_PlantsInBeds_/MapServer/0'
-
+const WIDGET_VERSION = '1.14.2'
 const SHOW_DEBUG = false
-
-type SpeciesOption = {
-  speciesUid: string
-  speciesName: string
-}
-
-const escapeSqlValue = (value: string) =>
-{
-  return value.replace(/'/g, "''")
-}
-
-const SELECTED_SPECIES_UID_KEY = 'gardenbeds:selectedSpeciesUid'
 
 const Widget = (props: AllWidgetProps<any>) =>
 {
@@ -29,24 +24,15 @@ const Widget = (props: AllWidgetProps<any>) =>
   const [matchingMasterGardenUids, setMatchingMasterGardenUids] = React.useState<string[]>([])
   const [statusMessage, setStatusMessage] = React.useState('Loading species...')
 
-  // Wrapper for setSelectedSpeciesUid that also updates sessionStorage
   const setSelectedSpeciesUid = (speciesUid: string) =>
   {
     setSelectedSpeciesUidState(speciesUid)
-    if (speciesUid)
-    {
-      sessionStorage.setItem(SELECTED_SPECIES_UID_KEY, speciesUid)
-    }
-    else
-    {
-      sessionStorage.removeItem(SELECTED_SPECIES_UID_KEY)
-    }
+    persistSelectedSpeciesUid(speciesUid)
   }
 
-  // Initialize selectedSpeciesUid from sessionStorage on mount
   React.useEffect(() =>
   {
-    const savedSpeciesUid = sessionStorage.getItem(SELECTED_SPECIES_UID_KEY) || ''
+    const savedSpeciesUid = getSelectedSpeciesUid()
     if (savedSpeciesUid)
     {
       setSelectedSpeciesUidState(savedSpeciesUid)
@@ -59,41 +45,8 @@ const Widget = (props: AllWidgetProps<any>) =>
     {
       try
       {
-        const query = new Query({
-          where: '1=1',
-          outFields: ['species_uid', 'species_name'],
-          returnGeometry: false
-        })
-
-        const result = await executeQueryJSON(SPECIES_TABLE_URL, query)
-
-        const uniqueSpeciesMap = new Map<string, SpeciesOption>()
-
-        ;(result.features || []).forEach((feature: __esri.Graphic) =>
-        {
-          const speciesUid = feature.attributes?.species_uid
-          const speciesName = feature.attributes?.species_name
-
-          if (
-            typeof speciesUid === 'string' &&
-            speciesUid.trim() !== '' &&
-            typeof speciesName === 'string' &&
-            speciesName.trim() !== '' &&
-            !uniqueSpeciesMap.has(speciesUid)
-          )
-          {
-            uniqueSpeciesMap.set(speciesUid, {
-              speciesUid,
-              speciesName
-            })
-          }
-        })
-
-        const loadedSpecies = Array.from(uniqueSpeciesMap.values()).sort((a, b) =>
-        {
-          return a.speciesName.localeCompare(b.speciesName)
-        })
-
+        const result = await executeQueryJSON(SPECIES_TABLE_URL, buildSpeciesQuery())
+        const loadedSpecies = parseSpeciesOptions(result.features || [])
         setSpeciesOptions(loadedSpecies)
         setStatusMessage(`${loadedSpecies.length} species loaded.`)
       }
@@ -122,32 +75,8 @@ const Widget = (props: AllWidgetProps<any>) =>
 
       try
       {
-        const query = new Query({
-          where: `species_uid = '${escapeSqlValue(selectedSpeciesUid)}'`,
-          outFields: ['garden_uid'],
-          returnGeometry: false
-        })
-
-        const result = await executeQueryJSON(PLANTS_IN_BED_URL, query)
-
-        const uniqueGardenUids = new Set<string>()
-
-        ;(result.features || []).forEach((feature: __esri.Graphic) =>
-        {
-          const gardenUid = feature.attributes?.garden_uid
-
-          if (typeof gardenUid === 'string' && gardenUid.trim() !== '')
-          {
-            uniqueGardenUids.add(gardenUid)
-          }
-        })
-
-        const sortedGardenUids = Array.from(uniqueGardenUids).sort((a, b) =>
-        {
-          return a.localeCompare(b)
-        })
-
-        setMatchingGardenUids(sortedGardenUids)
+        const result = await executeQueryJSON(PLANTS_IN_BED_URL, buildPlantsInBedQuery(selectedSpeciesUid))
+        setMatchingGardenUids(parseGardenUids(result.features || []))
         setStatusMessage(`${speciesOptions.length} species loaded.`)
       }
       catch (error)
@@ -206,7 +135,7 @@ const Widget = (props: AllWidgetProps<any>) =>
 
       try
       {
-        const whereClause = `garden_uid IN (${matchingGardenUids.map((gardenUid) => `'${escapeSqlValue(gardenUid)}'`).join(', ')})`
+        const whereClause = buildGardenUidWhereClause(matchingGardenUids)
 
         const queryResult = await masterDataSource.query({
           where: whereClause,
@@ -214,9 +143,9 @@ const Widget = (props: AllWidgetProps<any>) =>
         })
 
         const records = queryResult.records || []
-        const queriedMasterGardenUids = records
-          .map((record) => record.getFieldValue('garden_uid'))
-          .filter((value) => typeof value === 'string' && value.trim() !== '') as string[]
+        const queriedMasterGardenUids = (records as any[])
+          .map((record: any): unknown => record.getFieldValue('garden_uid'))
+          .filter((value): value is string => typeof value === 'string' && value.trim() !== '')
 
         setMatchingMasterGardenUids(queriedMasterGardenUids)
         masterDataSource.updateQueryParams({ where: whereClause }, props.id)
@@ -234,7 +163,7 @@ const Widget = (props: AllWidgetProps<any>) =>
   }, [matchingGardenUids, props.useDataSources])
 
   return (
-    <div className="widget-template-map-aware p-3 bg-white">
+    <div className="widget-template-map-aware p-3 bg-white" data-widget-version={WIDGET_VERSION}>
       
       <div className="mb-3">
         <label htmlFor="species-select"><strong>Species</strong></label>
@@ -248,7 +177,7 @@ const Widget = (props: AllWidgetProps<any>) =>
           }}
         >
           <option value="">Select a species</option>
-          {speciesOptions.map((species) =>
+          {speciesOptions.map((species: SpeciesOption) =>
           {
             return (
               <option key={species.speciesUid} value={species.speciesUid}>
@@ -294,7 +223,7 @@ const Widget = (props: AllWidgetProps<any>) =>
               {matchingGardenUids.length === 0 && 'None'}
               {matchingGardenUids.length > 0 && (
                 <ul className="mb-0">
-                  {matchingGardenUids.map((gardenUid) =>
+                  {matchingGardenUids.map((gardenUid: string) =>
                   {
                     return (
                       <li key={gardenUid}>{gardenUid}</li>
@@ -311,7 +240,7 @@ const Widget = (props: AllWidgetProps<any>) =>
               {matchingMasterGardenUids.length === 0 && 'None'}
               {matchingMasterGardenUids.length > 0 && (
                 <ul className="mb-0">
-                  {matchingMasterGardenUids.map((gardenUid) =>
+                  {matchingMasterGardenUids.map((gardenUid: string) =>
                   {
                     return (
                       <li key={gardenUid}>{gardenUid}</li>
